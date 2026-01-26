@@ -1,0 +1,1401 @@
+:root {
+  --nm-bg0: #070a12;
+  --nm-bg1: #0b1020;
+  --nm-card: rgba(255, 255, 255, 0.06);
+  --nm-card-strong: rgba(255, 255, 255, 0.09);
+  --nm-border: rgba(255, 255, 255, 0.12);
+  --nm-border-strong: rgba(255, 255, 255, 0.18);
+  --nm-text: rgba(255, 255, 255, 0.92);
+  --nm-muted: rgba(255, 255, 255, 0.65);
+  --nm-faint: rgba(255, 255, 255, 0.45);
+  --nm-good: #22c55e;
+  --nm-bad: #ef4444;
+  --nm-accent: #7c3aed;
+  --nm-accent-2: #22d3ee;
+  --nm-radius: 16px;
+  --nm-shadow: 0 24px 90px rgba(0, 0, 0, 0.55);
+}
+
+.nmApp {
+  position: relative;
+  height: 100%;
+  color: var(--nm-text);
+  background:
+    radial-gradient(1100px 700px at 18% 14%, rgba(124, 58, 237, 0.25), transparent 60%),
+    radial-gradient(900px 600px at 78% 18%, rgba(34, 211, 238, 0.18), transparent 55%),
+    radial-gradient(700px 500px at 80% 84%, rgba(34, 197, 94, 0.09), transparent 55%),
+    linear-gradient(180deg, var(--nm-bg0), var(--nm-bg1));
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 32px 1fr;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.nmTitleBar {
+  position: relative;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px;
+  gap: 8px;
+  -webkit-app-region: drag;
+  z-index: 1000;
+}
+
+.nmTitleBarDrag {
+  flex: 1;
+  -webkit-app-region: drag;
+}
+
+.nmApp::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(600px 340px at 50% 0%, black 20%, transparent 70%);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.nmShell {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  padding: 24px 20px 20px;
+  display: grid;
+  grid-template-rows: auto 48px 1fr;
+  gap: 18px;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  grid-row: 2;
+}
+
+.nmTopbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.nmBrand {
+  display: grid;
+  gap: 2px;
+}
+
+.nmTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nmMark {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background:
+    radial-gradient(12px 12px at 28% 30%, rgba(255, 255, 255, 0.42), transparent 60%),
+    linear-gradient(135deg, rgba(124, 58, 237, 0.95), rgba(34, 211, 238, 0.85));
+  box-shadow: 0 10px 40px rgba(124, 58, 237, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.nmTitle {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.nmSubtitle {
+  font-size: 12.5px;
+  color: var(--nm-muted);
+}
+
+.nmPills {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.nmPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--nm-border);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+  color: var(--nm-muted);
+}
+
+.nmDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.06);
+}
+
+.nmDotGood {
+  background: var(--nm-good);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
+}
+
+.nmDotBad {
+  background: var(--nm-bad);
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.16);
+}
+
+.nmDotPulse {
+  animation: nmPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes nmPulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.12);
+    filter: brightness(1.2);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+.nmMainGrid {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Ping page: gráfico em destaque, resultado atual, controles em barra + menu, log oculto */
+.nmPingPage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nmPingTopBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.nmPingStartBtn {
+  width: auto;
+  min-width: 180px;
+  height: 38px;
+  padding: 0 20px;
+}
+
+.nmPingTopBarRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.nmPingMenuBtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.nmPingMenuBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.nmPingDropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  min-width: 200px;
+  padding: 8px 0;
+  background: rgba(12, 18, 32, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.nmPingDropdownItem {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.nmPingDropdownItem:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.nmPingDropdownItem:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nmPingDropdownDivider {
+  height: 1px;
+  margin: 6px 10px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nmPingDropdownToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.nmPingDropdownToggle .nmSwitch {
+  flex-shrink: 0;
+}
+
+.nmPingDropdownStats {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.nmPingLogToggle {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.nmPingLogToggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nmPingLogToggleActive {
+  border-color: rgba(124, 58, 237, 0.4);
+  background: rgba(124, 58, 237, 0.15);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Card do gráfico – ocupa quase toda a altura */
+.nmLatencyChartCard {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.nmLatencyChartCard--hasError {
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 24px 90px rgba(124, 58, 237, 0.15), 0 0 0 1px rgba(239, 68, 68, 0.2);
+}
+
+.nmLatencyChartCard .nmLatencyChartHeader {
+  flex-shrink: 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nmLatencyChartTitle {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.nmLatencyErrorAlert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin: 8px 0;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  animation: nmErrorPulse 2s ease-in-out infinite;
+}
+
+@keyframes nmErrorPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+  }
+}
+
+.nmLatencyErrorIcon {
+  font-size: 18px;
+  line-height: 1;
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.nmLatencyErrorText {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  flex: 1;
+}
+
+.nmLatencyErrorCount {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.nmLatencyCurrentResult {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.nmLatencyCurrentValue {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: #fff;
+}
+
+.nmLatencyCurrentUnit {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.nmLatencyCurrentQuality {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nmLatencyCurrentEmpty {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.nmLatencyChartHint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.nmLatencyChartBody {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  padding: 12px 18px;
+  overflow: hidden;
+}
+
+.nmLatencyChartWrap {
+  width: 100%;
+  height: 100%;
+  min-height: 140px;
+}
+
+.nmLatencyChartSvg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.nmLatencyChartGrid {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.nmLatencyChartArea {
+  transition: opacity 0.2s ease;
+}
+
+.nmLatencyChartLine {
+  transition: stroke-dashoffset 0.2s ease;
+}
+
+.nmLatencyChartAxisLabel {
+  font-size: 10px;
+  fill: rgba(255, 255, 255, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+
+.nmLatencyChartAxisLabelMuted {
+  fill: rgba(255, 255, 255, 0.35);
+}
+
+.nmLatencyChartTimeLabel {
+  font-size: 10px;
+  fill: rgba(255, 255, 255, 0.45);
+}
+
+.nmLatencyChartEmpty {
+  font-size: 13px;
+  fill: rgba(255, 255, 255, 0.45);
+}
+
+/* Log card – altura fixa, só o conteúdo da lista rola */
+.nmLogsCard {
+  flex: 0 0 170px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nmLogsCard .nmCardHeader {
+  padding: 8px 12px;
+  flex-shrink: 0;
+}
+
+.nmLogsCard .nmLogsMeta {
+  padding: 6px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.nmLogsCard .nmLogList {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 8px 8px;
+}
+
+.nmLogsCard .nmRow {
+  padding: 6px 8px;
+  margin: 4px 4px;
+  border-radius: 10px;
+}
+
+.nmLogsCard .nmTime {
+  font-size: 11px;
+}
+
+.nmLogsCard .nmMsg {
+  font-size: 11.5px;
+}
+
+.nmLogsCard .nmEmpty {
+  padding: 12px;
+}
+
+.nmLogsCard .nmEmptyTitle {
+  font-size: 12px;
+}
+
+.nmLogsCard .nmEmptyText {
+  font-size: 11px;
+}
+
+.nmLogsCard .nmSearch {
+  height: 32px;
+  font-size: 12px;
+}
+
+.nmCard {
+  background: var(--nm-card);
+  border: 1px solid var(--nm-border);
+  border-radius: var(--nm-radius);
+  box-shadow: var(--nm-shadow);
+  backdrop-filter: blur(14px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nmCardHeader {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent);
+}
+
+.nmCardTitle {
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.nmCardBody {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.nmSpeedTestCard .nmCardBody {
+  padding-bottom: 24px;
+  overflow: visible;
+}
+
+.nmControls {
+  display: grid;
+  gap: 12px;
+}
+
+.nmPrimary {
+  display: grid;
+  gap: 8px;
+}
+
+.nmPrimaryBtn {
+  width: 100%;
+  height: 46px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  background:
+    radial-gradient(120px 60px at 25% 20%, rgba(255, 255, 255, 0.18), transparent 60%),
+    linear-gradient(135deg, rgba(124, 58, 237, 0.95), rgba(34, 211, 238, 0.85));
+  box-shadow: 0 18px 60px rgba(124, 58, 237, 0.18);
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  transition: transform 0.12s ease, filter 0.12s ease, opacity 0.12s ease;
+}
+
+.nmPrimaryBtn:hover {
+  filter: brightness(1.05);
+}
+
+.nmPrimaryBtn:active {
+  transform: translateY(1px);
+}
+
+.nmPrimaryBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nmDangerBtn {
+  background:
+    radial-gradient(120px 60px at 25% 20%, rgba(255, 255, 255, 0.16), transparent 60%),
+    linear-gradient(135deg, rgba(239, 68, 68, 0.92), rgba(245, 158, 11, 0.72));
+  box-shadow: 0 18px 60px rgba(239, 68, 68, 0.12);
+}
+
+.nmHint {
+  font-size: 12px;
+  color: var(--nm-muted);
+}
+
+.nmActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.nmBtn {
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.nmBtn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.nmBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nmToggles {
+  display: grid;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.nmToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.nmToggleLabel {
+  color: var(--nm-muted);
+}
+
+.nmSwitch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.nmSwitch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  transition: transform 0.14s ease, background 0.14s ease;
+}
+
+.nmSwitchOn {
+  background: rgba(34, 211, 238, 0.18);
+  border-color: rgba(34, 211, 238, 0.28);
+}
+
+.nmSwitchOn::after {
+  transform: translateX(18px);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.nmStatsGrid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.nmStat {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.nmStatLabel {
+  font-size: 11px;
+  color: var(--nm-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.nmStatValue {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.nmLogsHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.nmSearch {
+  flex: 1;
+  height: 38px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 0 12px;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+.nmSearch::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.nmLogsBody {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+}
+
+.nmLogsMeta {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--nm-muted);
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nmLogList {
+  padding: 10px 8px 12px;
+  overflow: auto;
+}
+
+.nmEmpty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--nm-muted);
+  padding: 28px;
+  text-align: center;
+}
+
+.nmEmptyTitle {
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.82);
+  margin-bottom: 6px;
+}
+
+.nmEmptyText {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.6);
+  max-width: 520px;
+}
+
+.nmRow {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  margin: 6px 6px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.nmRow:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.nmTime {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.nmMsg {
+  color: rgba(255, 255, 255, 0.88);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12.5px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.nmRowError {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.nmRowOk {
+  border-color: rgba(34, 197, 94, 0.18);
+  background: rgba(34, 197, 94, 0.05);
+}
+
+.nmBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.nmBadgeGood {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.nmBadgeBad {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.nmBadgePingExcellent {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.08);
+  color: rgba(34, 197, 94, 0.9);
+}
+
+.nmBadgePingGood {
+  border-color: rgba(34, 211, 238, 0.3);
+  background: rgba(34, 211, 238, 0.08);
+  color: rgba(34, 211, 238, 0.9);
+}
+
+.nmBadgePingFair {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+  color: rgba(245, 158, 11, 0.9);
+}
+
+.nmBadgePingPoor {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+  color: rgba(239, 68, 68, 0.9);
+}
+
+@media (max-width: 980px) {
+  .nmMainGrid {
+    grid-template-columns: 1fr;
+  }
+  .nmShell {
+    padding: 18px 14px 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nmDotPulse {
+    animation: none;
+  }
+}
+
+/* Tabs Styles */
+.nmTabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 0 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  height: 48px;
+  flex-shrink: 0;
+  align-items: flex-end;
+  grid-row: 2;
+}
+
+.nmTabContent {
+  grid-row: 3;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.nmTabContent > * {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nmTab {
+  padding: 10px 20px;
+  border-radius: 12px 12px 0 0;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--nm-muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+  position: relative;
+  top: 1px;
+}
+
+.nmTab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.nmTabActive {
+  background: var(--nm-card);
+  border-color: var(--nm-border);
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.nmTabActive::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.8), rgba(34, 211, 238, 0.8));
+}
+
+/* Speed Test Styles */
+.nmSpeedTestPage {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+  height: 100%;
+}
+
+.nmSpeedTestCard {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(34, 211, 238, 0.06));
+  box-shadow: 0 24px 90px rgba(124, 58, 237, 0.15);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  transition: box-shadow 0.4s ease, border-color 0.4s ease;
+}
+
+.nmSpeedTestCard--effectStart {
+  border-color: rgba(124, 58, 237, 0.5);
+  box-shadow:
+    0 24px 90px rgba(124, 58, 237, 0.15),
+    inset 0 0 48px rgba(124, 58, 237, 0.08);
+}
+
+.nmSpeedTestCard--effectEnd {
+  border-color: rgba(34, 197, 94, 0.35);
+  box-shadow:
+    0 24px 90px rgba(124, 58, 237, 0.15),
+    inset 0 0 56px rgba(34, 197, 94, 0.06);
+}
+
+.nmSpeedTestContainer {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 3vh, 24px);
+  max-width: 100%;
+  overflow: visible;
+  min-height: 0;
+  flex: 1;
+}
+
+.nmSpeedMeter {
+  position: relative;
+  width: min(280px, 40vw, 35vh);
+  height: min(280px, 40vw, 35vh);
+  margin: 0 auto;
+  flex-shrink: 1;
+  min-width: 180px;
+  min-height: 180px;
+}
+
+.nmSpeedMeterSvg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(0deg);
+}
+
+.nmSpeedMeterBg {
+  transition: stroke 0.3s ease;
+}
+
+.nmSpeedMeterProgress {
+  transition: stroke-dashoffset 0.1s linear;
+  filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.4));
+}
+
+.nmSpeedMeterContent {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.nmSpeedMeterValue {
+  font-size: clamp(24px, 5vw, 42px);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+}
+
+.nmSpeedMeterUnit {
+  font-size: clamp(12px, 2vw, 16px);
+  color: var(--nm-muted);
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.nmSpeedMeterPhase {
+  font-size: 12px;
+  color: var(--nm-faint);
+  margin-top: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nmSpeedStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  max-width: 100%;
+}
+
+@media (max-width: 980px) {
+  .nmSpeedStats {
+    grid-template-columns: 1fr;
+  }
+  .nmSpeedTestCard {
+    max-width: 100%;
+  }
+}
+
+.nmSpeedStat {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 6px;
+  position: relative;
+}
+
+.nmSpeedStatTooltip {
+  cursor: help;
+}
+
+.nmSpeedStatTooltip:hover {
+  border-color: rgba(124, 58, 237, 0.3);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.nmSpeedStatLabel {
+  font-size: 11px;
+  color: var(--nm-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.nmSpeedStatValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.3;
+}
+
+.nmPingQuality {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  width: fit-content;
+}
+
+.nmPingQualityDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  box-shadow: 0 0 8px currentColor;
+  flex-shrink: 0;
+}
+
+.nmPingQualityExcellent {
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+
+.nmPingQualityGood {
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+}
+
+.nmPingQualityFair {
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+.nmPingQualityPoor {
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+.nmPingQualityLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Window Controls */
+.nmWindowControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.nmWindowControl {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  -webkit-app-region: no-drag;
+}
+
+.nmWindowControl:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.nmWindowControl:active {
+  transform: scale(0.95);
+}
+
+.nmWindowControl:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.nmWindowControlClose:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.nmWindowControlMinimize:hover {
+  background: rgba(34, 211, 238, 0.15);
+  color: #22d3ee;
+  border-color: rgba(34, 211, 238, 0.3);
+}
+
+.nmSpeedChart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 32px;
+  margin-top: 4px;
+}
+
+.nmSpeedChartBar {
+  flex: 1;
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.6), rgba(34, 211, 238, 0.6));
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  transition: height 0.1s ease;
+  box-shadow: 0 -2px 8px rgba(124, 58, 237, 0.2);
+}
+
+.nmSpeedTestActions {
+  display: grid;
+  gap: 8px;
+  padding-top: 16px;
+  padding-bottom: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.nmSpeedTestActions .nmHint {
+  padding: 0;
+  margin: 0;
+  line-height: 1.5;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Tooltip Styles */
+.nmTooltip {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  padding: 18px;
+  background: linear-gradient(135deg, rgba(15, 20, 35, 0.98), rgba(10, 15, 30, 0.98));
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 1001;
+  text-align: left;
+}
+
+.nmSpeedStatTooltip:hover .nmTooltip {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+.nmSpeedStatTooltip:first-child .nmTooltip {
+  left: 0;
+  transform: translateX(0);
+}
+
+.nmSpeedStatTooltip:first-child:hover .nmTooltip {
+  transform: translateX(0) translateY(-4px);
+}
+
+.nmSpeedStatTooltip:first-child .nmTooltip::after {
+  left: 24px;
+  transform: translateX(0);
+}
+
+.nmSpeedStatTooltip:last-child .nmTooltip {
+  left: auto;
+  right: 0;
+  transform: translateX(0);
+}
+
+.nmSpeedStatTooltip:last-child:hover .nmTooltip {
+  transform: translateX(0) translateY(-4px);
+}
+
+.nmSpeedStatTooltip:last-child .nmTooltip::after {
+  left: auto;
+  right: 24px;
+  transform: translateX(0);
+}
+
+.nmTooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid rgba(15, 20, 35, 0.98);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.nmTooltipTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+
+.nmTooltipDescription {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.nmTooltipTips {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nmTooltipTipsTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+
+.nmTooltipTipsList {
+  margin: 0;
+  padding-left: 20px;
+  list-style: none;
+}
+
+.nmTooltipTipsList li {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
+  margin-bottom: 6px;
+  position: relative;
+}
+
+.nmTooltipTipsList li::before {
+  content: "→";
+  position: absolute;
+  left: -18px;
+  color: rgba(124, 58, 237, 0.6);
+  font-weight: 600;
+}
+
+.nmTooltipTipsList li:last-child {
+  margin-bottom: 0;
+}
