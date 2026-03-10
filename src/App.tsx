@@ -251,6 +251,11 @@ function App() {
     if (!api?.onPingData) return
 
     const cleanup = api.onPingData((data: string) => {
+      // Se recebeu dados, o ping está rodando
+      if (!isRunning) {
+        setIsRunning(true)
+      }
+
       const now = new Date()
       const timestamp = now.toLocaleTimeString()
       const time = now.getTime()
@@ -281,7 +286,7 @@ function App() {
     })
 
     return () => cleanup()
-  }, [])
+  }, [isRunning])
 
   useEffect(() => {
     if (!autoScroll) return
@@ -388,6 +393,38 @@ function App() {
     }
   }, [speedTestFlash])
 
+  // Escutar comando do tray para iniciar teste de velocidade
+  useEffect(() => {
+    const api = window.electron
+    if (!api?.onTrayStartSpeedTest) return
+
+    const cleanup = api.onTrayStartSpeedTest(() => {
+      // Mudar para aba de velocidade
+      setActiveTab('speed')
+      // Iniciar teste após um pequeno delay para garantir que a aba foi mudada
+      setTimeout(() => {
+        const electronApi = window.electron
+        if (electronApi?.startSpeedTest) {
+          electronApi.startSpeedTest()
+        }
+      }, 100)
+    })
+
+    return () => cleanup()
+  }, [])
+
+  // Sincronizar isRunning com o estado real do ping
+  useEffect(() => {
+    const api = window.electron
+    if (!api?.onPingStatusChanged) return
+
+    const cleanup = api.onPingStatusChanged((data: { running: boolean }) => {
+      setIsRunning(data.running)
+    })
+
+    return () => cleanup()
+  }, [])
+
   useEffect(() => {
     if (!pingMenuOpen) return
     const onMouseDown = (e: MouseEvent) => {
@@ -482,6 +519,48 @@ function App() {
     if (!stats.last) return 'idle' as const
     return stats.last.isError ? ('bad' as const) : ('good' as const)
   }, [isRunning, stats.last])
+
+  // Atualizar status da conexão no system tray
+  useEffect(() => {
+    const api = window.electron
+    if (!api?.updateConnectionStatus) return
+
+    let status: 'connected' | 'disconnected' | 'monitoring'
+    if (!isRunning) {
+      status = 'disconnected'
+    } else if (health === 'bad') {
+      status = 'disconnected'
+    } else if (health === 'good') {
+      status = 'connected'
+    } else {
+      // Quando está rodando mas ainda não tem dados suficientes
+      status = 'monitoring'
+    }
+
+    api.updateConnectionStatus(status)
+  }, [isRunning, health])
+
+  // Detectar novos erros e enviar notificação
+  const prevErrorTimeRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!recentError || !isRunning) {
+      prevErrorTimeRef.current = null
+      return
+    }
+
+    const api = window.electron
+    if (!api?.showConnectionErrorNotification) return
+
+    // Se é um novo erro (diferente do anterior)
+    const isNewError = prevErrorTimeRef.current === null || 
+                       recentError.lastTime !== prevErrorTimeRef.current
+
+    if (isNewError) {
+      prevErrorTimeRef.current = recentError.lastTime
+      // Enviar notificação quando detectar erro (o cooldown é gerenciado no main process)
+      api.showConnectionErrorNotification(recentError.message)
+    }
+  }, [recentError, isRunning])
 
   const clearLogs = () => setLogs([])
 
@@ -676,7 +755,8 @@ function App() {
               </div>
             </div>
 
-            <section className={['nmCard', 'nmLatencyChartCard', recentError ? 'nmLatencyChartCard--hasError' : ''].filter(Boolean).join(' ')}>
+            {!showLogPanel && (
+              <section className={['nmCard', 'nmLatencyChartCard', recentError ? 'nmLatencyChartCard--hasError' : ''].filter(Boolean).join(' ')}>
               <div className="nmLatencyChartHeader">
                 <div className="nmLatencyChartTitle">Latência em tempo real</div>
                 {recentError && (
@@ -746,6 +826,7 @@ function App() {
                 </div>
               </div>
             </section>
+            )}
 
             {showLogPanel && (
               <section className="nmCard nmLogsCard">
@@ -759,7 +840,7 @@ function App() {
                   <span><strong>{visibleLogs.length}</strong> de <strong>{stats.total}</strong></span>
                   <span>{onlyErrors ? 'Falhas' : 'Tudo'}</span>
                 </div>
-                <div className="nmLogList">
+                <div className="nmLogList" style={{ maxHeight: '200px', overflowY: 'auto' }}>
                   {visibleLogs.length === 0 ? (
                     <div className="nmEmpty">
                       <div className="nmEmptyTitle">Nenhuma linha</div>

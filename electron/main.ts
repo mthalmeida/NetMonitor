@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain } from 'electron' // Adicionado ipcMain
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process' // Adicionado spawn para rodar o Ping
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import https from 'node:https'
 import http from 'node:http'
 
@@ -15,9 +15,313 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
+// Função para criar ícones do system tray - ícone de rede/monitoramento moderno
+function createTrayIcon(status: 'connected' | 'disconnected' | 'monitoring'): Electron.NativeImage {
+  const size = 32 // Tamanho maior para melhor qualidade
+  const canvas = Buffer.alloc(size * size * 4)
+  
+  let color: { r: number; g: number; b: number }
+  switch (status) {
+    case 'connected':
+      color = { r: 34, g: 197, b: 94 } // Verde #22c55e
+      break
+    case 'disconnected':
+      color = { r: 239, g: 68, b: 68 } // Vermelho #ef4444
+      break
+    case 'monitoring':
+      color = { r: 251, g: 146, b: 60 } // Laranja #fb923c
+      break
+  }
+  
+  // Desenhar ícone de ondas de sinal Wi-Fi (estilo moderno)
+  const centerX = size / 2
+  const centerY = size / 2 + 2 // Ligeiramente abaixo do centro
+  
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4
+      const dx = x - centerX
+      const dy = y - centerY
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      
+      let alpha = 0
+      
+      // Desenhar ondas de sinal (semicírculos concêntricos, estilo Wi-Fi)
+      // Onda 1 (menor, mais próxima do centro)
+      if (dist >= 3 && dist <= 4.5 && dy <= 0) {
+        alpha = 255
+      }
+      // Onda 2 (média)
+      else if (dist >= 5.5 && dist <= 7 && dy <= 0) {
+        alpha = 220
+      }
+      // Onda 3 (maior)
+      else if (dist >= 8.5 && dist <= 10 && dy <= 0) {
+        alpha = 180
+      }
+      // Ponto central (indicador de conexão)
+      else if (dist <= 2) {
+        alpha = 255
+      }
+      
+      if (alpha > 0) {
+        canvas[idx] = color.r
+        canvas[idx + 1] = color.g
+        canvas[idx + 2] = color.b
+        canvas[idx + 3] = alpha
+      } else {
+        canvas[idx] = 0
+        canvas[idx + 1] = 0
+        canvas[idx + 2] = 0
+        canvas[idx + 3] = 0
+      }
+    }
+  }
+  
+  return nativeImage.createFromBuffer(canvas, { width: size, height: size })
+}
+
+function showConnectionErrorNotification(message: string) {
+  const now = Date.now()
+  
+  // Evitar spam de notificações - só enviar se passou o cooldown
+  if (now - lastNotificationTime < NOTIFICATION_COOLDOWN_MS) {
+    return
+  }
+  
+  lastNotificationTime = now
+  
+  // Verificar se as notificações estão disponíveis
+  if (!Notification.isSupported()) {
+    console.warn('Notificações não são suportadas neste sistema')
+    return
+  }
+  
+  // Criar ícone simples para a notificação
+  const iconSize = 64
+  const iconCanvas = Buffer.alloc(iconSize * iconSize * 4)
+  const centerX = iconSize / 2
+  const centerY = iconSize / 2
+  
+  for (let y = 0; y < iconSize; y++) {
+    for (let x = 0; x < iconSize; x++) {
+      const idx = (y * iconSize + x) * 4
+      const dx = x - centerX
+      const dy = y - centerY
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      
+      if (dist <= iconSize / 2 - 2) {
+        // Círculo vermelho
+        iconCanvas[idx] = 239     // R
+        iconCanvas[idx + 1] = 68  // G
+        iconCanvas[idx + 2] = 68  // B
+        iconCanvas[idx + 3] = 255 // A
+        
+        // Desenhar X branco no centro
+        if ((Math.abs(dx) < 8 && Math.abs(dy) < 2) || (Math.abs(dy) < 8 && Math.abs(dx) < 2) ||
+            (Math.abs(dx - dy) < 2 && Math.abs(dx) < 10) || (Math.abs(dx + dy) < 2 && Math.abs(dx) < 10)) {
+          iconCanvas[idx] = 255
+          iconCanvas[idx + 1] = 255
+          iconCanvas[idx + 2] = 255
+        }
+      } else {
+        iconCanvas[idx] = 0
+        iconCanvas[idx + 1] = 0
+        iconCanvas[idx + 2] = 0
+        iconCanvas[idx + 3] = 0
+      }
+    }
+  }
+  
+  const notification = new Notification({
+    title: 'NetMonitor - Problema de Conexão',
+    body: message,
+    icon: nativeImage.createFromBuffer(iconCanvas, { width: iconSize, height: iconSize }),
+    urgency: 'critical' as const,
+    timeoutType: 'default' as const
+  })
+  
+  notification.on('click', () => {
+    if (win) {
+      win.show()
+      win.focus()
+    } else {
+      createWindow()
+    }
+  })
+  
+  notification.show()
+}
+
+function updateTrayIcon(status: 'connected' | 'disconnected' | 'monitoring') {
+  if (!tray) return
+  const icon = createTrayIcon(status)
+  tray.setImage(icon)
+  
+  let tooltip = 'NetMonitor'
+  switch (status) {
+    case 'connected':
+      tooltip = 'NetMonitor - Conectado'
+      break
+    case 'disconnected':
+      tooltip = 'NetMonitor - Desconectado'
+      break
+    case 'monitoring':
+      tooltip = 'NetMonitor - Monitorando'
+      break
+  }
+  tray.setToolTip(tooltip)
+  updateTrayMenu()
+}
+
+function detectPingError(line: string): { isError: boolean; message?: string } {
+  const lowerLine = line.toLowerCase()
+  
+  if (lowerLine.includes('esgotado') || lowerLine.includes('timed out') || lowerLine.includes('request timed out')) {
+    return { isError: true, message: 'Timeout: conexão não respondeu' }
+  }
+  if (lowerLine.includes('unreachable') || lowerLine.includes('inacess') || lowerLine.includes('destination host unreachable')) {
+    return { isError: true, message: 'Host inacessível: verifique a conexão' }
+  }
+  if (lowerLine.includes('falha') || lowerLine.includes('general failure') || lowerLine.includes('failure')) {
+    return { isError: true, message: 'Falha de conexão detectada' }
+  }
+  
+  return { isError: false }
+}
+
+function startMonitoring() {
+  if (pingProcess) return
+
+  isMonitoring = true
+  updateTrayIcon('monitoring')
+  pingProcess = spawn('ping', ['8.8.8.8', '-t'])
+
+  // Notificar o renderer que o ping foi iniciado
+  win?.webContents.send('ping-status-changed', { running: true })
+
+  pingProcess.stdout.on('data', (data: Buffer) => {
+    const dataStr = data.toString()
+    win?.webContents.send('ping-data', dataStr)
+    
+    // Detectar erros no output do ping e enviar notificação
+    const lines = dataStr.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    for (const line of lines) {
+      const errorInfo = detectPingError(line)
+      if (errorInfo.isError && errorInfo.message) {
+        showConnectionErrorNotification(errorInfo.message)
+        break // Só enviar uma notificação por batch de dados
+      }
+    }
+  })
+
+  pingProcess.stderr.on('data', (data: Buffer) => {
+    const errorStr = data.toString()
+    console.error(`Erro Ping: ${errorStr}`)
+    
+    // Detectar erros no stderr também
+    const errorInfo = detectPingError(errorStr)
+    if (errorInfo.isError && errorInfo.message) {
+      showConnectionErrorNotification(errorInfo.message)
+    }
+  })
+
+  pingProcess.on('close', () => {
+    pingProcess = null
+    isMonitoring = false
+    updateTrayIcon('disconnected')
+    // Notificar o renderer que o ping foi parado
+    win?.webContents.send('ping-status-changed', { running: false })
+  })
+}
+
+function stopMonitoring() {
+  if (pingProcess) {
+    pingProcess.kill()
+    pingProcess = null
+    isMonitoring = false
+    updateTrayIcon('disconnected')
+    // Notificar o renderer que o ping foi parado
+    win?.webContents.send('ping-status-changed', { running: false })
+  }
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+  
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Abrir NetMonitor',
+      click: () => {
+        if (win) {
+          win.show()
+          win.focus()
+        } else {
+          createWindow()
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: isMonitoring ? 'Pausar Monitoramento' : 'Iniciar Monitoramento',
+      click: () => {
+        if (isMonitoring) {
+          stopMonitoring()
+        } else {
+          startMonitoring()
+        }
+      }
+    },
+    {
+      label: 'Executar Teste de Velocidade',
+      click: () => {
+        if (win) {
+          win.show()
+          win.focus()
+        } else {
+          createWindow()
+        }
+        // Enviar comando para iniciar teste e mudar para aba de velocidade
+        setTimeout(() => {
+          win?.webContents.send('tray-start-speed-test')
+        }, 500)
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Sair',
+      click: () => {
+        if (pingProcess) pingProcess.kill()
+        app.quit()
+      }
+    }
+  ])
+  
+  tray.setContextMenu(contextMenu)
+}
+
+function createTray() {
+  const icon = createTrayIcon('disconnected')
+  tray = new Tray(icon)
+  updateTrayMenu()
+  
+  tray.on('click', () => {
+    if (win) {
+      win.show()
+      win.focus()
+    } else {
+      createWindow()
+    }
+  })
+}
+
 let win: BrowserWindow | null = null
 let pingProcess: ChildProcessWithoutNullStreams | null = null
 let speedTestAbortController: AbortController | null = null
+let tray: Tray | null = null
+let isMonitoring = false
+let lastNotificationTime = 0
+const NOTIFICATION_COOLDOWN_MS = 30000 // 30 segundos entre notificações
 
 function createWindow() {
   win = new BrowserWindow({
@@ -60,28 +364,11 @@ function createWindow() {
 
 
 ipcMain.on('start-ping', () => {
-  if (pingProcess) return
-
-  pingProcess = spawn('ping', ['8.8.8.8', '-t'])
-
-  pingProcess.stdout.on('data', (data: Buffer) => {
-    win?.webContents.send('ping-data', data.toString())
-  })
-
-  pingProcess.stderr.on('data', (data: Buffer) => {
-    console.error(`Erro Ping: ${data}`)
-  })
-
-  pingProcess.on('close', () => {
-    pingProcess = null
-  })
+  startMonitoring()
 })
 
 ipcMain.on('stop-ping', () => {
-  if (pingProcess) {
-    pingProcess.kill()
-    pingProcess = null
-  }
+  stopMonitoring()
 })
 
 async function measureDownloadSpeed(url: string, durationMs: number = 10000): Promise<{ speed: number; progress: number }> {
@@ -291,15 +578,30 @@ ipcMain.on('window-minimize', () => {
 })
 
 ipcMain.on('window-close', () => {
-  win?.close()
+  // Em vez de fechar, minimizar para a bandeja
+  if (win) {
+    win.hide()
+  }
+})
+
+// Handler para atualizar status da conexão do renderer
+ipcMain.on('update-connection-status', (_event, status: 'connected' | 'disconnected' | 'monitoring') => {
+  updateTrayIcon(status)
+})
+
+// Handler para o renderer solicitar notificação de erro
+ipcMain.on('show-connection-error-notification', (_event, message: string) => {
+  showConnectionErrorNotification(message)
 })
 
 app.on('window-all-closed', () => {
-  if (pingProcess) pingProcess.kill()
-
+  // Não fechar o app quando todas as janelas são fechadas no Windows
+  // O app continua rodando na bandeja
   if (process.platform !== 'darwin') {
-    app.quit()
-    win = null
+    // Não fazer app.quit() aqui para manter o app rodando na bandeja
+    if (win) {
+      win.hide()
+    }
   }
 })
 
@@ -309,4 +611,16 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+  createTray()
+  
+  // Prevenir que o app feche quando a janela é fechada
+  app.on('before-quit', (event) => {
+    // Se não for uma saída explícita (menu Sair), apenas esconder a janela
+    if (win && !win.isDestroyed()) {
+      event.preventDefault()
+      win.hide()
+    }
+  })
+})

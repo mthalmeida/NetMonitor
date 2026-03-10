@@ -1,4 +1,4 @@
-import { ipcMain, app, BrowserWindow } from "electron";
+import { ipcMain, app, BrowserWindow, Notification, nativeImage, Tray, Menu } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -10,9 +10,253 @@ const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
 const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+function createTrayIcon(status) {
+  const size = 32;
+  const canvas = Buffer.alloc(size * size * 4);
+  let color;
+  switch (status) {
+    case "connected":
+      color = { r: 34, g: 197, b: 94 };
+      break;
+    case "disconnected":
+      color = { r: 239, g: 68, b: 68 };
+      break;
+    case "monitoring":
+      color = { r: 251, g: 146, b: 60 };
+      break;
+  }
+  const centerX = size / 2;
+  const centerY = size / 2 + 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      let alpha = 0;
+      if (dist >= 3 && dist <= 4.5 && dy <= 0) {
+        alpha = 255;
+      } else if (dist >= 5.5 && dist <= 7 && dy <= 0) {
+        alpha = 220;
+      } else if (dist >= 8.5 && dist <= 10 && dy <= 0) {
+        alpha = 180;
+      } else if (dist <= 2) {
+        alpha = 255;
+      }
+      if (alpha > 0) {
+        canvas[idx] = color.r;
+        canvas[idx + 1] = color.g;
+        canvas[idx + 2] = color.b;
+        canvas[idx + 3] = alpha;
+      } else {
+        canvas[idx] = 0;
+        canvas[idx + 1] = 0;
+        canvas[idx + 2] = 0;
+        canvas[idx + 3] = 0;
+      }
+    }
+  }
+  return nativeImage.createFromBuffer(canvas, { width: size, height: size });
+}
+function showConnectionErrorNotification(message) {
+  const now = Date.now();
+  if (now - lastNotificationTime < NOTIFICATION_COOLDOWN_MS) {
+    return;
+  }
+  lastNotificationTime = now;
+  if (!Notification.isSupported()) {
+    console.warn("Notificações não são suportadas neste sistema");
+    return;
+  }
+  const iconSize = 64;
+  const iconCanvas = Buffer.alloc(iconSize * iconSize * 4);
+  const centerX = iconSize / 2;
+  const centerY = iconSize / 2;
+  for (let y = 0; y < iconSize; y++) {
+    for (let x = 0; x < iconSize; x++) {
+      const idx = (y * iconSize + x) * 4;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= iconSize / 2 - 2) {
+        iconCanvas[idx] = 239;
+        iconCanvas[idx + 1] = 68;
+        iconCanvas[idx + 2] = 68;
+        iconCanvas[idx + 3] = 255;
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 2 || Math.abs(dy) < 8 && Math.abs(dx) < 2 || Math.abs(dx - dy) < 2 && Math.abs(dx) < 10 || Math.abs(dx + dy) < 2 && Math.abs(dx) < 10) {
+          iconCanvas[idx] = 255;
+          iconCanvas[idx + 1] = 255;
+          iconCanvas[idx + 2] = 255;
+        }
+      } else {
+        iconCanvas[idx] = 0;
+        iconCanvas[idx + 1] = 0;
+        iconCanvas[idx + 2] = 0;
+        iconCanvas[idx + 3] = 0;
+      }
+    }
+  }
+  const notification = new Notification({
+    title: "NetMonitor - Problema de Conexão",
+    body: message,
+    icon: nativeImage.createFromBuffer(iconCanvas, { width: iconSize, height: iconSize }),
+    urgency: "critical",
+    timeoutType: "default"
+  });
+  notification.on("click", () => {
+    if (win) {
+      win.show();
+      win.focus();
+    } else {
+      createWindow();
+    }
+  });
+  notification.show();
+}
+function updateTrayIcon(status) {
+  if (!tray) return;
+  const icon = createTrayIcon(status);
+  tray.setImage(icon);
+  let tooltip = "NetMonitor";
+  switch (status) {
+    case "connected":
+      tooltip = "NetMonitor - Conectado";
+      break;
+    case "disconnected":
+      tooltip = "NetMonitor - Desconectado";
+      break;
+    case "monitoring":
+      tooltip = "NetMonitor - Monitorando";
+      break;
+  }
+  tray.setToolTip(tooltip);
+  updateTrayMenu();
+}
+function detectPingError(line) {
+  const lowerLine = line.toLowerCase();
+  if (lowerLine.includes("esgotado") || lowerLine.includes("timed out") || lowerLine.includes("request timed out")) {
+    return { isError: true, message: "Timeout: conexão não respondeu" };
+  }
+  if (lowerLine.includes("unreachable") || lowerLine.includes("inacess") || lowerLine.includes("destination host unreachable")) {
+    return { isError: true, message: "Host inacessível: verifique a conexão" };
+  }
+  if (lowerLine.includes("falha") || lowerLine.includes("general failure") || lowerLine.includes("failure")) {
+    return { isError: true, message: "Falha de conexão detectada" };
+  }
+  return { isError: false };
+}
+function startMonitoring() {
+  if (pingProcess) return;
+  isMonitoring = true;
+  updateTrayIcon("monitoring");
+  pingProcess = spawn("ping", ["8.8.8.8", "-t"]);
+  win == null ? void 0 : win.webContents.send("ping-status-changed", { running: true });
+  pingProcess.stdout.on("data", (data) => {
+    const dataStr = data.toString();
+    win == null ? void 0 : win.webContents.send("ping-data", dataStr);
+    const lines = dataStr.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      const errorInfo = detectPingError(line);
+      if (errorInfo.isError && errorInfo.message) {
+        showConnectionErrorNotification(errorInfo.message);
+        break;
+      }
+    }
+  });
+  pingProcess.stderr.on("data", (data) => {
+    const errorStr = data.toString();
+    console.error(`Erro Ping: ${errorStr}`);
+    const errorInfo = detectPingError(errorStr);
+    if (errorInfo.isError && errorInfo.message) {
+      showConnectionErrorNotification(errorInfo.message);
+    }
+  });
+  pingProcess.on("close", () => {
+    pingProcess = null;
+    isMonitoring = false;
+    updateTrayIcon("disconnected");
+    win == null ? void 0 : win.webContents.send("ping-status-changed", { running: false });
+  });
+}
+function stopMonitoring() {
+  if (pingProcess) {
+    pingProcess.kill();
+    pingProcess = null;
+    isMonitoring = false;
+    updateTrayIcon("disconnected");
+    win == null ? void 0 : win.webContents.send("ping-status-changed", { running: false });
+  }
+}
+function updateTrayMenu() {
+  if (!tray) return;
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Abrir NetMonitor",
+      click: () => {
+        if (win) {
+          win.show();
+          win.focus();
+        } else {
+          createWindow();
+        }
+      }
+    },
+    { type: "separator" },
+    {
+      label: isMonitoring ? "Pausar Monitoramento" : "Iniciar Monitoramento",
+      click: () => {
+        if (isMonitoring) {
+          stopMonitoring();
+        } else {
+          startMonitoring();
+        }
+      }
+    },
+    {
+      label: "Executar Teste de Velocidade",
+      click: () => {
+        if (win) {
+          win.show();
+          win.focus();
+        } else {
+          createWindow();
+        }
+        setTimeout(() => {
+          win == null ? void 0 : win.webContents.send("tray-start-speed-test");
+        }, 500);
+      }
+    },
+    { type: "separator" },
+    {
+      label: "Sair",
+      click: () => {
+        if (pingProcess) pingProcess.kill();
+        app.quit();
+      }
+    }
+  ]);
+  tray.setContextMenu(contextMenu);
+}
+function createTray() {
+  const icon = createTrayIcon("disconnected");
+  tray = new Tray(icon);
+  updateTrayMenu();
+  tray.on("click", () => {
+    if (win) {
+      win.show();
+      win.focus();
+    } else {
+      createWindow();
+    }
+  });
+}
 let win = null;
 let pingProcess = null;
 let speedTestAbortController = null;
+let tray = null;
+let isMonitoring = false;
+let lastNotificationTime = 0;
+const NOTIFICATION_COOLDOWN_MS = 3e4;
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
@@ -47,23 +291,10 @@ function createWindow() {
   }
 }
 ipcMain.on("start-ping", () => {
-  if (pingProcess) return;
-  pingProcess = spawn("ping", ["8.8.8.8", "-t"]);
-  pingProcess.stdout.on("data", (data) => {
-    win == null ? void 0 : win.webContents.send("ping-data", data.toString());
-  });
-  pingProcess.stderr.on("data", (data) => {
-    console.error(`Erro Ping: ${data}`);
-  });
-  pingProcess.on("close", () => {
-    pingProcess = null;
-  });
+  startMonitoring();
 });
 ipcMain.on("stop-ping", () => {
-  if (pingProcess) {
-    pingProcess.kill();
-    pingProcess = null;
-  }
+  stopMonitoring();
 });
 async function measureDownloadSpeed(url, durationMs = 1e4) {
   return new Promise((resolve, reject) => {
@@ -237,13 +468,21 @@ ipcMain.on("window-minimize", () => {
   win == null ? void 0 : win.minimize();
 });
 ipcMain.on("window-close", () => {
-  win == null ? void 0 : win.close();
+  if (win) {
+    win.hide();
+  }
+});
+ipcMain.on("update-connection-status", (_event, status) => {
+  updateTrayIcon(status);
+});
+ipcMain.on("show-connection-error-notification", (_event, message) => {
+  showConnectionErrorNotification(message);
 });
 app.on("window-all-closed", () => {
-  if (pingProcess) pingProcess.kill();
   if (process.platform !== "darwin") {
-    app.quit();
-    win = null;
+    if (win) {
+      win.hide();
+    }
   }
 });
 app.on("activate", () => {
@@ -251,7 +490,16 @@ app.on("activate", () => {
     createWindow();
   }
 });
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  createTray();
+  app.on("before-quit", (event) => {
+    if (win && !win.isDestroyed()) {
+      event.preventDefault();
+      win.hide();
+    }
+  });
+});
 export {
   MAIN_DIST,
   RENDERER_DIST,
