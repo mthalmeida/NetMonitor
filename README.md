@@ -11,6 +11,8 @@
 
 [Funcionalidades](#-funcionalidades) • [Instalação](#-instalação) • [Tecnologias](#-tecnologias)
 
+![NetMonitor — Interface do aplicativo](public/netmonitor.gif)
+
 </div>
 
 ---
