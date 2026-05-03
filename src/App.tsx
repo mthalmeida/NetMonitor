@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import './App.css'
 import logoApp from './assets/logo_app.png'
 
@@ -10,6 +10,16 @@ type LogEntry = {
   time?: number
   latencyMs?: number | null
 }
+
+type LatencyChartPoint = {
+  x: number
+  y: number
+  ms: number
+  ts: string
+  time: number
+}
+
+const FIVE_MIN_MS = 5 * 60 * 1000
 
 type SpeedTestData = {
   download: number | null
@@ -233,6 +243,7 @@ function App() {
   const [autoScroll, setAutoScroll] = useState(true)
   const [showLogPanel, setShowLogPanel] = useState(false)
   const [pingMenuOpen, setPingMenuOpen] = useState(false)
+  const [hoveredLatencyIndex, setHoveredLatencyIndex] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const pingMenuRef = useRef<HTMLDivElement>(null)
   const [speedTest, setSpeedTest] = useState<SpeedTestData>({
@@ -489,12 +500,10 @@ function App() {
     })
   }, [logs, onlyErrors, query])
 
-  const FIVE_MIN_MS = 5 * 60 * 1000
-
   const latencyChart = useMemo(() => {
-    const w = 400
-    const h = 180
-    const pad = { left: 40, right: 16, top: 20, bottom: 28 }
+    const w = 640
+    const h = 260
+    const pad = { left: 52, right: 22, top: 18, bottom: 38 }
     const gW = w - pad.left - pad.right
     const gH = h - pad.top - pad.bottom
     const withTime = logs.filter((l): l is LogEntry & { time: number } => l.time != null)
@@ -505,17 +514,18 @@ function App() {
       .map(l => ({ time: l.time, ms: l.latencyMs!, ts: l.timestamp }))
       .sort((a, b) => a.time - b.time)
     if (points.length === 0) {
-      return { points: [] as { x: number; y: number; ms: number; ts: string }[], maxMs: 50, path: '', areaPath: '', pad, w, h, gW, gH, refTime, windowMs: FIVE_MIN_MS }
+      return { points: [] as LatencyChartPoint[], maxMs: 50, path: '', areaPath: '', pad, w, h, gW, gH, refTime, windowMs: FIVE_MIN_MS }
     }
     const maxMs = Math.max(20, ...points.map(p => p.ms), 1)
-    const displayMax = Math.min(maxMs * 1.15, Math.max(maxMs, 100))
+    const displayMax = Math.ceil((maxMs * 1.2) / 10) * 10
     const scaleY = (ms: number) => pad.top + gH - (ms / displayMax) * gH
     const scaleX = (t: number) => pad.left + ((t - cutoff) / FIVE_MIN_MS) * gW
     const coords = points.map(p => ({
       x: scaleX(p.time),
       y: scaleY(p.ms),
       ms: p.ms,
-      ts: p.ts
+      ts: p.ts,
+      time: p.time
     }))
     let path = ''
     let areaPath = ''
@@ -528,6 +538,37 @@ function App() {
     }
     return { points: coords, maxMs: displayMax, path, areaPath, pad, w, h, gW, gH, refTime, windowMs: FIVE_MIN_MS }
   }, [logs])
+
+  const hoveredLatencyPoint = hoveredLatencyIndex != null ? latencyChart.points[hoveredLatencyIndex] : null
+
+  useEffect(() => {
+    if (hoveredLatencyIndex != null && hoveredLatencyIndex >= latencyChart.points.length) {
+      setHoveredLatencyIndex(null)
+    }
+  }, [hoveredLatencyIndex, latencyChart.points.length])
+
+  const handleLatencyChartMouseMove = (event: ReactMouseEvent<SVGSVGElement>) => {
+    if (latencyChart.points.length === 0) return
+
+    const rect = event.currentTarget.getBoundingClientRect()
+    const scale = Math.min(rect.width / latencyChart.w, rect.height / latencyChart.h)
+    const offsetX = (rect.width - latencyChart.w * scale) / 2
+    const svgX = (event.clientX - rect.left - offsetX) / scale
+    const clampedX = Math.max(latencyChart.pad.left, Math.min(latencyChart.pad.left + latencyChart.gW, svgX))
+
+    let closestIndex = 0
+    let closestDistance = Math.abs(latencyChart.points[0].x - clampedX)
+
+    for (let i = 1; i < latencyChart.points.length; i += 1) {
+      const distance = Math.abs(latencyChart.points[i].x - clampedX)
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestIndex = i
+      }
+    }
+
+    setHoveredLatencyIndex(closestIndex)
+  }
 
   const health = useMemo(() => {
     if (!isRunning) return 'idle' as const
@@ -801,35 +842,81 @@ function App() {
               </div>
               <div className="nmLatencyChartBody">
                 <div className="nmLatencyChartWrap">
-                  <svg className="nmLatencyChartSvg" viewBox={`0 0 ${latencyChart.w} ${latencyChart.h}`} preserveAspectRatio="xMidYMid meet">
+                  <svg
+                    className="nmLatencyChartSvg"
+                    viewBox={`0 0 ${latencyChart.w} ${latencyChart.h}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    onMouseMove={handleLatencyChartMouseMove}
+                    onMouseLeave={() => setHoveredLatencyIndex(null)}
+                  >
                     <defs>
                       <linearGradient id="latencyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="rgba(124, 58, 237, 0.35)" />
-                        <stop offset="100%" stopColor="rgba(124, 58, 237, 0.02)" />
+                        <stop offset="0%" stopColor="rgba(34, 211, 238, 0.3)" />
+                        <stop offset="55%" stopColor="rgba(124, 58, 237, 0.12)" />
+                        <stop offset="100%" stopColor="rgba(34, 211, 238, 0.01)" />
+                      </linearGradient>
+                      <linearGradient id="latencyLineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#22d3ee" />
+                        <stop offset="55%" stopColor="#8b5cf6" />
+                        <stop offset="100%" stopColor="#22c55e" />
                       </linearGradient>
                     </defs>
                     {latencyChart.points.length > 0 && (
                       <>
-                        <rect x={latencyChart.pad.left} y={latencyChart.pad.top} width={latencyChart.gW} height={latencyChart.gH} fill="rgba(0,0,0,0.2)" rx="6" />
-                        {[0.25, 0.5, 0.75].map(frac => (
+                        <rect className="nmLatencyChartPlot" x={latencyChart.pad.left} y={latencyChart.pad.top} width={latencyChart.gW} height={latencyChart.gH} rx="8" />
+                        {[0, 0.25, 0.5, 0.75, 1].map(frac => (
                           <line key={frac} className="nmLatencyChartGrid" x1={latencyChart.pad.left} y1={latencyChart.pad.top + latencyChart.gH * (1 - frac)} x2={latencyChart.pad.left + latencyChart.gW} y2={latencyChart.pad.top + latencyChart.gH * (1 - frac)} />
                         ))}
-                        {[0.33, 0.66].map(frac => (
+                        {[0, 0.25, 0.5, 0.75, 1].map(frac => (
                           <line key={frac} className="nmLatencyChartGrid" x1={latencyChart.pad.left + latencyChart.gW * frac} y1={latencyChart.pad.top} x2={latencyChart.pad.left + latencyChart.gW * frac} y2={latencyChart.pad.top + latencyChart.gH} />
                         ))}
                         <path d={latencyChart.areaPath} fill="url(#latencyGradient)" className="nmLatencyChartArea" />
-                        <path d={latencyChart.path} fill="none" stroke="url(#latencyLineGradient)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="nmLatencyChartLine" />
-                        <defs>
-                          <linearGradient id="latencyLineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor="#7c3aed" />
-                            <stop offset="100%" stopColor="#22d3ee" />
-                          </linearGradient>
-                        </defs>
-                        <text x={latencyChart.pad.left - 6} y={latencyChart.pad.top} textAnchor="end" className="nmLatencyChartAxisLabel">{Math.round(latencyChart.maxMs)}</text>
-                        <text x={latencyChart.pad.left - 6} y={latencyChart.pad.top + latencyChart.gH} textAnchor="end" className="nmLatencyChartAxisLabel">0</text>
-                        <text x={latencyChart.pad.left - 6} y={latencyChart.pad.top + latencyChart.gH / 2} textAnchor="end" className="nmLatencyChartAxisLabel nmLatencyChartAxisLabelMuted">{Math.round(latencyChart.maxMs / 2)}</text>
-                        <text x={latencyChart.pad.left} y={latencyChart.h - 6} textAnchor="start" className="nmLatencyChartAxisLabel nmLatencyChartTimeLabel">5 min</text>
-                        <text x={latencyChart.pad.left + latencyChart.gW} y={latencyChart.h - 6} textAnchor="end" className="nmLatencyChartAxisLabel nmLatencyChartTimeLabel">0</text>
+                        <path d={latencyChart.path} fill="none" stroke="url(#latencyLineGradient)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="nmLatencyChartLine" />
+                        {latencyChart.points.map((point, index) => {
+                          const quality = getPingQuality(point.ms)
+                          return (
+                            <circle
+                              key={`${point.time}-${index}`}
+                              className={['nmLatencyChartPoint', hoveredLatencyIndex === index ? 'nmLatencyChartPointActive' : ''].join(' ')}
+                              cx={point.x}
+                              cy={point.y}
+                              r={hoveredLatencyIndex === index ? 5 : 3}
+                              style={{ fill: quality.color }}
+                            />
+                          )
+                        })}
+                        {[0, 0.25, 0.5, 0.75, 1].map(frac => (
+                          <text key={frac} x={latencyChart.pad.left - 8} y={latencyChart.pad.top + latencyChart.gH * (1 - frac) + 3} textAnchor="end" className="nmLatencyChartAxisLabel">
+                            {Math.round(latencyChart.maxMs * frac)}
+                          </text>
+                        ))}
+                        <text x={latencyChart.pad.left} y={latencyChart.h - 10} textAnchor="start" className="nmLatencyChartAxisLabel nmLatencyChartTimeLabel">5 min atrás</text>
+                        <text x={latencyChart.pad.left + latencyChart.gW / 2} y={latencyChart.h - 10} textAnchor="middle" className="nmLatencyChartAxisLabel nmLatencyChartTimeLabel">2:30 atrás</text>
+                        <text x={latencyChart.pad.left + latencyChart.gW} y={latencyChart.h - 10} textAnchor="end" className="nmLatencyChartAxisLabel nmLatencyChartTimeLabel">agora</text>
+                        {hoveredLatencyPoint && (
+                          <g className="nmLatencyChartHover">
+                            <line className="nmLatencyChartCrosshair" x1={hoveredLatencyPoint.x} y1={latencyChart.pad.top} x2={hoveredLatencyPoint.x} y2={latencyChart.pad.top + latencyChart.gH} />
+                            <line className="nmLatencyChartCrosshair nmLatencyChartCrosshairMuted" x1={latencyChart.pad.left} y1={hoveredLatencyPoint.y} x2={latencyChart.pad.left + latencyChart.gW} y2={hoveredLatencyPoint.y} />
+                            <circle className="nmLatencyChartHoverRing" cx={hoveredLatencyPoint.x} cy={hoveredLatencyPoint.y} r="8" />
+                            {(() => {
+                              const tooltipW = 136
+                              const tooltipH = 58
+                              const rawX = hoveredLatencyPoint.x + 12
+                              const rawY = hoveredLatencyPoint.y - tooltipH - 12
+                              const x = Math.max(latencyChart.pad.left + 8, Math.min(rawX, latencyChart.w - tooltipW - 8))
+                              const y = Math.max(latencyChart.pad.top + 8, rawY)
+                              const quality = getPingQuality(hoveredLatencyPoint.ms)
+                              return (
+                                <g transform={`translate(${x} ${y})`} className="nmLatencyChartTooltip">
+                                  <rect width={tooltipW} height={tooltipH} rx="8" />
+                                  <text x="12" y="21" className="nmLatencyChartTooltipValue">{Math.round(hoveredLatencyPoint.ms)} ms</text>
+                                  <text x="12" y="39" className="nmLatencyChartTooltipTime">{hoveredLatencyPoint.ts}</text>
+                                  <text x={tooltipW - 12} y="39" textAnchor="end" className="nmLatencyChartTooltipQuality" style={{ fill: quality.color }}>{quality.label}</text>
+                                </g>
+                              )
+                            })()}
+                          </g>
+                        )}
                       </>
                     )}
                     {latencyChart.points.length === 0 && (
