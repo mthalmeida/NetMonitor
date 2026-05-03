@@ -59,3 +59,74 @@ O aplicativo roda na bandeja do sistema e continua monitorando mesmo com a janel
 | **Empacotamento** | electron-builder |
 
 ### Estrutura do projeto
+net-monitor/
+├── electron/          # Processo principal Electron
+│   ├── main.ts        # Janela, tray, ping, speed test, notificações
+│   └── preload.ts     # API segura (contextBridge) para o renderer
+├── src/               # Frontend React
+│   ├── App.tsx        # UI principal (abas, gráficos, lógica)
+│   ├── App.css
+│   ├── main.tsx
+│   └── index.css
+├── dist/              # Build do renderer (Vite)
+├── dist-electron/     # Build do main + preload
+└── package.json
+```
+
+---
+
+## 🚀 Instalação
+
+### Pré-requisitos
+- **Node.js** 18+ (recomendado LTS)
+- **npm** ou **pnpm**
+
+### Desenvolvimento
+```bash
+# Clonar o repositório
+git clone https://github.com/seu-usuario/net-monitor.git
+cd net-monitor
+
+# Instalar dependências
+npm install
+
+# Executar em modo desenvolvimento
+npm run dev
+```
+
+### Build para produção
+```bash
+npm run build
+```
+
+O comando `build` executa `tsc`, `vite build` e `electron-builder`. O executável gerado ficará em `dist/` (ou conforme configurado no electron-builder).
+
+### Scripts disponíveis
+| Script | Descrição |
+|--------|-----------|
+| `npm run dev` | Inicia Vite + Electron em modo desenvolvimento |
+| `npm run build` | Compila TypeScript, build Vite e empacota com electron-builder |
+| `npm run lint` | Executa ESLint em `.ts` e `.tsx` |
+| `npm run preview` | Preview do build Vite (modo web) |
+
+---
+
+## 📌 Observações
+
+- **Sistema operacional**: O monitoramento via ping usa o comando nativo do SO (`ping 8.8.8.8 -t` no Windows). O app foi testado em Windows.
+- **Modo web**: Rodando sem Electron (`npm run preview`), a interface carrega, mas funções que dependem de IPC (ping, speed test, tray) não funcionarão — o status mostrará "Modo web (IPC indisponível)".
+- **Janela fixa**: A janela principal tem tamanho fixo (1200×800 px) e não é redimensionável.
+
+---
+
+## 📄 Licença
+
+Este projeto está sob licença privada (`"private": true` no `package.json`). Consulte os termos antes de reutilizar ou redistribuir.
+
+---
+
+<div align="center">
+
+**NetMonitor** — Monitor de conectividade com telemetria em tempo real
+
+</div>
