@@ -91,6 +91,7 @@
 .nmBrand {
   display: grid;
   gap: 2px;
+  padding-left: 16px;
 }
 
 .nmTitleRow {
@@ -100,14 +101,15 @@
 }
 
 .nmMark {
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  background:
-    radial-gradient(12px 12px at 28% 30%, rgba(255, 255, 255, 0.42), transparent 60%),
-    linear-gradient(135deg, rgba(124, 58, 237, 0.95), rgba(34, 211, 238, 0.85));
-  box-shadow: 0 10px 40px rgba(124, 58, 237, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  width: auto;
+  height: 72px;
+  border-radius: 0;
+  max-width: 240px;
+  object-fit: contain;
+  object-position: left center;
+  box-shadow: none;
+  border: none;
+  display: block;
 }
 
 .nmTitle {
@@ -489,9 +491,9 @@
   fill: rgba(255, 255, 255, 0.45);
 }
 
-/* Log card – altura fixa, só o conteúdo da lista rola */
+/* Log card – ocupa a área disponível, lista com rolagem interna */
 .nmLogsCard {
-  flex: 0 0 170px;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;

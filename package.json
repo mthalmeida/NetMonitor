@@ -1,7 +1,9 @@
 {
   "name": "net-monitor",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.2",
+  "description": "Aplicativo desktop para monitoramento de conectividade de rede em tempo real.",
+  "author": "https://www.linkedin.com/in/mthalmeida/ ",
   "type": "module",
   "scripts": {
     "dev": "vite",

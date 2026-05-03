@@ -4,6 +4,7 @@ import path from 'node:path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import https from 'node:https'
 import http from 'node:http'
+import crypto from 'node:crypto'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -324,8 +325,10 @@ let lastNotificationTime = 0
 const NOTIFICATION_COOLDOWN_MS = 30000 // 30 segundos entre notificações
 
 function createWindow() {
+  const appIconPath = path.join(process.env.APP_ROOT, 'src', 'assets', 'ico_app.ico')
+
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    icon: appIconPath,
     width: 1200,
     height: 800,
     minWidth: 1200,
@@ -371,165 +374,546 @@ ipcMain.on('stop-ping', () => {
   stopMonitoring()
 })
 
-async function measureDownloadSpeed(url: string, durationMs: number = 10000): Promise<{ speed: number; progress: number }> {
+type SpeedResult = { speed: number; progress: number }
+
+const SPEED_TEST_WARMUP_MS = 1000
+const SPEED_TEST_PROGRESS_MS = 200
+const DOWNLOAD_INITIAL_CONNECTIONS_PER_ENDPOINT = 8
+const DOWNLOAD_MAX_CONNECTIONS_PER_ENDPOINT = 24
+const DOWNLOAD_CONNECTION_RAMP_MS = 700
+const DOWNLOAD_ROLLING_WINDOW_MS = 2500
+const CURL_DOWNLOAD_CONNECTIONS_PER_ENDPOINT = 12
+const DOWNLOAD_TEST_URLS = [
+  'https://speed.cloudflare.com/__down?bytes=1000000000',
+  'https://proof.ovh.net/files/1Gb.dat',
+  'https://speed.hetzner.de/1GB.bin',
+  'https://cachefly.cachefly.net/100mb.test'
+]
+
+function bytesToMbps(bytes: number, elapsedMs: number): number {
+  return (bytes * 8) / Math.max(0.001, elapsedMs / 1000) / 1_000_000
+}
+
+function createAbortError(): Error {
+  const error = new Error('Teste cancelado')
+  error.name = 'AbortError'
+  return error
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.message === 'Aborted')
+}
+
+function getProtocol(url: string) {
+  return url.startsWith('https:') ? https : http
+}
+
+async function measureDownloadSpeedWithCurl(urls: string[], durationMs: number): Promise<SpeedResult> {
   return new Promise((resolve, reject) => {
+    const curlCommand = process.platform === 'win32' ? 'curl.exe' : 'curl'
+    const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null'
+    const startedAt = Date.now()
+    let output = ''
+    let errorOutput = ''
+    let settled = false
+    const args = [
+      '--location',
+      '--http1.1',
+      '--silent',
+      '--show-error',
+      '--parallel',
+      '--parallel-immediate',
+      '--parallel-max',
+      String(urls.length * CURL_DOWNLOAD_CONNECTIONS_PER_ENDPOINT),
+      '--connect-timeout',
+      '5',
+      '--max-time',
+      String(Math.ceil(durationMs / 1000))
+    ]
+
+    for (const url of urls) {
+      for (let i = 0; i < CURL_DOWNLOAD_CONNECTIONS_PER_ENDPOINT; i += 1) {
+        const separator = url.includes('?') ? '&' : '?'
+        args.push(
+          '--output',
+          nullDevice,
+          '--write-out',
+          '%{speed_download}\n',
+          `${url}${separator}nonce=${Date.now()}-${i}`
+        )
+      }
+    }
+
+    const curl = spawn(curlCommand, args, {
+      windowsHide: true
+    })
+
+    const cleanup = () => {
+      clearInterval(progressTimer)
+      clearTimeout(safetyTimer)
+      speedTestAbortController?.signal.removeEventListener('abort', abortHandler)
+    }
+
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      cleanup()
+
+      if (error) {
+        reject(error)
+        return
+      }
+
+      const speedsBytesPerSecond = output
+        .split(/\r?\n/)
+        .map(line => Number(line.trim()))
+        .filter(value => Number.isFinite(value) && value > 0)
+
+      if (speedsBytesPerSecond.length === 0) {
+        reject(new Error(errorOutput.trim() || 'curl não retornou velocidade de download'))
+        return
+      }
+
+      const speed = speedsBytesPerSecond.reduce((sum, value) => sum + value, 0) * 8 / 1_000_000
+      resolve({ speed, progress: 100 })
+    }
+
+    const progressTimer = setInterval(() => {
+      const elapsed = Date.now() - startedAt
+      win?.webContents.send('speed-test-data', {
+        type: 'download-progress',
+        download: null,
+        progress: Math.min(99, (elapsed / durationMs) * 100)
+      })
+    }, SPEED_TEST_PROGRESS_MS)
+
+    const safetyTimer = setTimeout(() => {
+      if (!curl.killed) curl.kill()
+    }, durationMs + 4000)
+
+    const abortHandler = () => {
+      if (!curl.killed) curl.kill()
+      finish(createAbortError())
+    }
+    speedTestAbortController?.signal.addEventListener('abort', abortHandler, { once: true })
+
+    curl.stdout.on('data', (data: Buffer) => {
+      output += data.toString()
+    })
+
+    curl.stderr.on('data', (data: Buffer) => {
+      errorOutput += data.toString()
+    })
+
+    curl.on('error', (error) => finish(error))
+
+    curl.on('close', (code) => {
+      // curl retorna 28 quando --max-time encerra transferências ativas; ainda assim
+      // ele emite speed_download para cada transferência, que é o que precisamos.
+      if (code !== 0 && code !== 28 && output.trim().length === 0) {
+        finish(new Error(errorOutput.trim() || `curl finalizou com código ${code}`))
+        return
+      }
+      finish()
+    })
+  })
+}
+
+async function measureDownloadSpeed(urls: string | string[], durationMs: number = 10000): Promise<SpeedResult> {
+  return new Promise((resolve, reject) => {
+    const endpointUrls = Array.isArray(urls) ? urls : [urls]
     const startTime = Date.now()
     let totalBytes = 0
-    const chunks: Buffer[] = []
-    let lastProgressUpdate = Date.now()
+    let warmupBytesBase: number | null = null
+    let settled = false
+    let activeConnections = 0
+    let lastError: Error | null = null
+    let startedConnectionsPerEndpoint = 0
+    let bestMeasuredSpeed = 0
+    const speedSamples: { elapsedMs: number; bytes: number }[] = []
+    const requests: http.ClientRequest[] = []
+    const responses: http.IncomingMessage[] = []
+    const signal = speedTestAbortController?.signal
+    const maxConnectionCount = endpointUrls.length * DOWNLOAD_MAX_CONNECTIONS_PER_ENDPOINT
+    const agents = new Map<string, http.Agent | https.Agent>()
+    let progressTimer: ReturnType<typeof setInterval> | undefined
+    let rampTimer: ReturnType<typeof setInterval> | undefined
+    let finishTimer: ReturnType<typeof setTimeout> | undefined
 
-    const protocol = url.startsWith('https:') ? https : http
-    const request = protocol.get(url, { signal: speedTestAbortController?.signal }, (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`HTTP ${response.statusCode}`))
+    const calculateSpeed = () => {
+      const elapsed = Date.now() - startTime
+      if (elapsed < SPEED_TEST_WARMUP_MS) return 0
+
+      speedSamples.push({ elapsedMs: elapsed, bytes: totalBytes })
+      while (speedSamples.length > 2 && elapsed - speedSamples[0].elapsedMs > DOWNLOAD_ROLLING_WINDOW_MS * 2) {
+        speedSamples.shift()
+      }
+
+      const windowStart = [...speedSamples]
+        .reverse()
+        .find(sample => elapsed - sample.elapsedMs >= DOWNLOAD_ROLLING_WINDOW_MS)
+      const baselineBytes = warmupBytesBase ?? 0
+      const rollingSpeed = windowStart
+        ? bytesToMbps(totalBytes - windowStart.bytes, elapsed - windowStart.elapsedMs)
+        : bytesToMbps(Math.max(0, totalBytes - baselineBytes), elapsed - SPEED_TEST_WARMUP_MS)
+
+      if (rollingSpeed > bestMeasuredSpeed) {
+        bestMeasuredSpeed = rollingSpeed
+      }
+
+      return rollingSpeed
+    }
+
+    const cleanup = () => {
+      if (progressTimer) clearInterval(progressTimer)
+      if (rampTimer) clearInterval(rampTimer)
+      if (finishTimer) clearTimeout(finishTimer)
+      signal?.removeEventListener('abort', abortHandler)
+      for (const request of requests) request.destroy()
+      for (const response of responses) response.destroy()
+      for (const agent of agents.values()) agent.destroy()
+    }
+
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      cleanup()
+
+      if (error) {
+        reject(error)
         return
       }
 
-      response.on('data', (chunk: Buffer) => {
-        totalBytes += chunk.length
-        chunks.push(chunk)
-        const now = Date.now()
-        const elapsed = now - startTime
+      const averageSpeed = bytesToMbps(Math.max(0, totalBytes - (warmupBytesBase ?? 0)), Date.now() - startTime - SPEED_TEST_WARMUP_MS)
+      const speed = Math.max(bestMeasuredSpeed, averageSpeed)
+      if (speed <= 0 && lastError) {
+        reject(lastError)
+        return
+      }
+      resolve({ speed, progress: 100 })
+    }
 
-        if (now - lastProgressUpdate > 100) {
-          const currentSpeed = (totalBytes * 8) / (elapsed / 1000) / 1_000_000
-          win?.webContents.send('speed-test-data', {
-            type: 'download-progress',
-            download: currentSpeed,
-            progress: Math.min(100, (elapsed / durationMs) * 100)
+    const abortHandler = () => finish(createAbortError())
+    signal?.addEventListener('abort', abortHandler, { once: true })
+
+    progressTimer = setInterval(() => {
+      if (settled) return
+      const elapsed = Date.now() - startTime
+      if (elapsed >= SPEED_TEST_WARMUP_MS && warmupBytesBase == null) {
+        warmupBytesBase = totalBytes
+      }
+      win?.webContents.send('speed-test-data', {
+        type: 'download-progress',
+        download: calculateSpeed(),
+        progress: Math.min(99, (elapsed / durationMs) * 100)
+      })
+    }, SPEED_TEST_PROGRESS_MS)
+
+    rampTimer = setInterval(() => {
+      if (settled || startedConnectionsPerEndpoint >= DOWNLOAD_MAX_CONNECTIONS_PER_ENDPOINT) return
+      startConnections(4)
+    }, DOWNLOAD_CONNECTION_RAMP_MS)
+
+    finishTimer = setTimeout(() => finish(), durationMs)
+
+    const onConnectionEnded = () => {
+      activeConnections -= 1
+      if (activeConnections <= 0 && totalBytes === 0 && lastError) {
+        finish(lastError)
+      }
+    }
+
+    const getAgent = (url: string) => {
+      const protocolName = url.startsWith('https:') ? 'https' : 'http'
+      const existing = agents.get(protocolName)
+      if (existing) return existing
+
+      const agent = protocolName === 'https'
+        ? new https.Agent({ keepAlive: false, maxSockets: maxConnectionCount })
+        : new http.Agent({ keepAlive: false, maxSockets: maxConnectionCount })
+      agents.set(protocolName, agent)
+      return agent
+    }
+
+    const startConnection = (baseUrl: string, index: number) => {
+      if (settled) return
+
+      const separator = baseUrl.includes('?') ? '&' : '?'
+      const requestUrl = `${baseUrl}${separator}nonce=${Date.now()}-${index}`
+      activeConnections += 1
+
+      try {
+        const protocol = getProtocol(requestUrl)
+        const requestOptions: http.RequestOptions & { highWaterMark: number } = {
+          agent: getAgent(requestUrl),
+          signal,
+          highWaterMark: 1024 * 1024,
+          headers: {
+            'Cache-Control': 'no-store, no-cache',
+            'Pragma': 'no-cache',
+            'Connection': 'keep-alive'
+          }
+        }
+
+        const request = protocol.get(requestUrl, requestOptions, (response) => {
+          responses.push(response)
+          const statusCode = response.statusCode ?? 0
+          if (statusCode < 200 || statusCode >= 300) {
+            lastError = new Error(`HTTP ${statusCode} no download`)
+            response.resume()
+            onConnectionEnded()
+            return
+          }
+
+          response.on('data', (chunk: Buffer) => {
+            if (settled) return
+            totalBytes += chunk.length
           })
-          lastProgressUpdate = now
+
+          response.on('end', onConnectionEnded)
+          response.on('error', (error) => {
+            lastError = error
+            onConnectionEnded()
+          })
+        })
+
+        requests.push(request)
+        request.on('error', (error) => {
+          if (settled || isAbortError(error)) return
+          lastError = error
+          onConnectionEnded()
+        })
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Falha ao iniciar conexão de download')
+        onConnectionEnded()
+      }
+    }
+
+    function startConnections(countPerEndpoint: number) {
+      const remaining = DOWNLOAD_MAX_CONNECTIONS_PER_ENDPOINT - startedConnectionsPerEndpoint
+      const nextCount = Math.min(countPerEndpoint, remaining)
+      if (nextCount <= 0) return
+
+      for (const url of endpointUrls) {
+        for (let i = 0; i < nextCount; i += 1) {
+          startConnection(url, startedConnectionsPerEndpoint + i)
         }
+      }
 
-        if (elapsed >= durationMs) {
-          response.destroy()
-          const finalSpeed = (totalBytes * 8) / (elapsed / 1000) / 1_000_000
-          resolve({ speed: finalSpeed, progress: 100 })
-        }
-      })
+      startedConnectionsPerEndpoint += nextCount
+    }
 
-      response.on('end', () => {
-        const elapsed = Date.now() - startTime
-        const finalSpeed = (totalBytes * 8) / (elapsed / 1000) / 1_000_000
-        resolve({ speed: finalSpeed, progress: 100 })
-      })
-
-      response.on('error', reject)
-    })
-
-    request.on('error', reject)
+    startConnections(DOWNLOAD_INITIAL_CONNECTIONS_PER_ENDPOINT)
   })
 }
 
-async function measureUploadSpeed(url: string, dataSizeMB: number = 25): Promise<{ speed: number; progress: number }> {
+function uploadPayload(url: string, payload: Buffer): Promise<number> {
   return new Promise((resolve, reject) => {
-    const dataSize = Math.floor(dataSizeMB * 1024 * 1024)
-    const chunkSize = 64 * 1024
-    const data = Buffer.alloc(chunkSize, 'A')
-    let uploadedBytes = 0
+    const protocol = getProtocol(url)
+    const signal = speedTestAbortController?.signal
     const startTime = Date.now()
-    let lastProgressUpdate = Date.now()
+    let settled = false
 
-    const protocol = url.startsWith('https:') ? https : http
-    const options = {
+    const request = protocol.request(url, {
       method: 'POST',
+      signal,
       headers: {
         'Content-Type': 'application/octet-stream',
-        'Content-Length': dataSize.toString()
-      },
-      signal: speedTestAbortController?.signal
-    }
-
-    const request = protocol.request(url, options, (response) => {
-      response.on('data', () => {})
+        'Content-Length': payload.length,
+        'Cache-Control': 'no-store, no-cache',
+        'Pragma': 'no-cache',
+        'Connection': 'keep-alive'
+      }
+    }, (response) => {
+      response.resume()
       response.on('end', () => {
-        const elapsed = Date.now() - startTime
-        const finalSpeed = (uploadedBytes * 8) / (elapsed / 1000) / 1_000_000
-        resolve({ speed: finalSpeed, progress: 100 })
+        if (settled) return
+        settled = true
+        const statusCode = response.statusCode ?? 0
+        if (statusCode < 200 || statusCode >= 300) {
+          reject(new Error(`HTTP ${statusCode} no upload`))
+          return
+        }
+        resolve(Date.now() - startTime)
       })
-      response.on('error', reject)
+      response.on('error', (error) => {
+        if (settled) return
+        settled = true
+        reject(error)
+      })
     })
 
-    request.on('error', reject)
+    request.on('error', (error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    })
 
-    const MIN_BYTES_FOR_CALC = 512 * 1024 // 512 KB mínimo antes de calcular
-    const MIN_TIME_FOR_CALC = 500 // 500ms mínimo antes de calcular
-
-    function updateProgress() {
-      const now = Date.now()
-      const elapsed = now - startTime
-      
-      // Só calcula velocidade se tiver tempo e bytes suficientes para evitar picos iniciais
-      if (elapsed >= MIN_TIME_FOR_CALC && uploadedBytes >= MIN_BYTES_FOR_CALC && elapsed > 0) {
-        const currentSpeed = (uploadedBytes * 8) / (elapsed / 1000) / 1_000_000
-        win?.webContents.send('speed-test-data', {
-          type: 'upload-progress',
-          upload: currentSpeed,
-          progress: Math.min(100, (uploadedBytes / dataSize) * 100)
-        })
-        lastProgressUpdate = now
-      }
-    }
-
-    function sendChunk() {
-      if (speedTestAbortController?.signal.aborted) {
-        request.destroy()
-        reject(new Error('Aborted'))
-        return
-      }
-
-      const toSend = Math.min(chunkSize, dataSize - uploadedBytes)
-      if (toSend <= 0) {
-        request.end()
-        return
-      }
-
-      const canContinue = request.write(data.slice(0, toSend))
-      uploadedBytes += toSend
-
-      const now = Date.now()
-      if (now - lastProgressUpdate >= 100) {
-        updateProgress()
-      }
-
-      if (!canContinue) {
-        request.once('drain', () => {
-          sendChunk()
-        })
-      } else {
-        setImmediate(sendChunk)
-      }
-    }
-
-    sendChunk()
+    request.end(payload)
   })
 }
 
-async function measurePing(host: string = 'https://www.google.com'): Promise<number> {
+async function measureUploadSpeed(url: string, durationMs: number = 10000): Promise<SpeedResult> {
+  const payloadSizes = [512 * 1024, 1024 * 1024, 2 * 1024 * 1024, 4 * 1024 * 1024, 8 * 1024 * 1024]
+  const payloadCache = new Map<number, Buffer>()
+  const startTime = Date.now()
+  let measuredBytes = 0
+  let measuredElapsedMs = 0
+  let lastSpeed = 0
+  let lastError: unknown = null
+
+  const getPayload = (size: number) => {
+    const cached = payloadCache.get(size)
+    if (cached) return cached
+    const payload = crypto.randomBytes(size)
+    payloadCache.set(size, payload)
+    return payload
+  }
+
+  const reportProgress = () => {
+    const elapsed = Date.now() - startTime
+    win?.webContents.send('speed-test-data', {
+      type: 'upload-progress',
+      upload: lastSpeed,
+      progress: Math.min(99, (elapsed / durationMs) * 100)
+    })
+  }
+
+  while (Date.now() - startTime < durationMs) {
+    if (speedTestAbortController?.signal.aborted) throw createAbortError()
+
+    const elapsed = Date.now() - startTime
+    const nextSize = elapsed < SPEED_TEST_WARMUP_MS
+      ? payloadSizes[0]
+      : payloadSizes[Math.min(payloadSizes.length - 1, Math.max(1, Math.floor(lastSpeed / 35)))]
+
+    try {
+      const requestElapsedMs = await uploadPayload(url, getPayload(nextSize))
+      if (Date.now() - startTime >= SPEED_TEST_WARMUP_MS) {
+        measuredBytes += nextSize
+        measuredElapsedMs += requestElapsedMs
+        lastSpeed = bytesToMbps(measuredBytes, measuredElapsedMs)
+        reportProgress()
+      }
+    } catch (error) {
+      if (isAbortError(error)) throw error
+      lastError = error
+      break
+    }
+  }
+
+  if (measuredBytes === 0) {
+    throw lastError instanceof Error ? lastError : new Error('Falha no teste de upload')
+  }
+
+  return { speed: bytesToMbps(measuredBytes, measuredElapsedMs), progress: 100 }
+}
+
+async function measureDownloadWithFallback(durationMs: number): Promise<SpeedResult> {
+  try {
+    return await measureDownloadSpeedWithCurl(DOWNLOAD_TEST_URLS, durationMs)
+  } catch (error) {
+    if (isAbortError(error)) throw error
+    console.warn('Teste de download com curl falhou; usando fallback Node:', error)
+  }
+
+  try {
+    return await measureDownloadSpeed(DOWNLOAD_TEST_URLS, durationMs)
+  } catch (error) {
+    if (isAbortError(error)) throw error
+  }
+
+  let lastError: unknown = null
+  for (const url of DOWNLOAD_TEST_URLS) {
+    try {
+      return await measureDownloadSpeed(url, durationMs)
+    } catch (error) {
+      if (isAbortError(error)) throw error
+      lastError = error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Falha no teste de download')
+}
+
+async function measureUploadWithFallback(durationMs: number): Promise<SpeedResult> {
+  const urls = [
+    'https://speed.cloudflare.com/__up',
+    'https://httpbin.org/post'
+  ]
+
+  let lastError: unknown = null
+  for (const url of urls) {
+    try {
+      return await measureUploadSpeed(url, durationMs)
+    } catch (error) {
+      if (isAbortError(error)) throw error
+      lastError = error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Falha no teste de upload')
+}
+
+function extractPingTimes(output: string): number[] {
+  const matches = output.matchAll(/(?:tempo|time)[=<]?\s*(\d+(?:[.,]\d+)?)\s*ms/gi)
+  const values: number[] = []
+  for (const match of matches) {
+    const value = Number(match[1].replace(',', '.'))
+    if (Number.isFinite(value)) values.push(value)
+  }
+  return values
+}
+
+async function measurePing(host: string = '1.1.1.1', count: number = 4): Promise<number> {
   return new Promise((resolve) => {
-    const startTime = process.hrtime.bigint()
-    const protocol = host.startsWith('https:') ? https : http
-    const url = new URL(host.startsWith('http') ? host : `https://${host}`)
-    
-    const request = protocol.get({
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: '/',
-      timeout: 5000,
-      signal: speedTestAbortController?.signal
-    }, () => {
-      const endTime = process.hrtime.bigint()
-      const latency = Number(endTime - startTime) / 1_000_000
-      resolve(latency)
+    const isWindows = process.platform === 'win32'
+    const args = isWindows
+      ? ['-n', String(count), '-w', '1200', host]
+      : ['-c', String(count), '-W', '1', host]
+    const pingCmd = spawn('ping', args)
+    let output = ''
+    let settled = false
+    const MAX_PING_TIME_MS = 8000
+
+    const finish = (value: number) => {
+      if (settled) return
+      settled = true
+      clearTimeout(safetyTimeout)
+      resolve(value)
+    }
+
+    const safetyTimeout = setTimeout(() => {
+      if (!pingCmd.killed) pingCmd.kill()
+      finish(999)
+    }, MAX_PING_TIME_MS)
+
+    const abortHandler = () => {
+      if (!pingCmd.killed) pingCmd.kill()
+      finish(999)
+    }
+    speedTestAbortController?.signal.addEventListener('abort', abortHandler, { once: true })
+
+    pingCmd.stdout.on('data', (data: Buffer) => {
+      output += data.toString()
     })
 
-    request.on('error', () => {
-      resolve(999)
+    pingCmd.stderr.on('data', (data: Buffer) => {
+      output += data.toString()
     })
 
-    request.on('timeout', () => {
-      request.destroy()
-      resolve(999)
+    pingCmd.on('error', () => {
+      speedTestAbortController?.signal.removeEventListener('abort', abortHandler)
+      finish(999)
+    })
+
+    pingCmd.on('close', () => {
+      speedTestAbortController?.signal.removeEventListener('abort', abortHandler)
+      const samples = extractPingTimes(output)
+      if (samples.length === 0) {
+        finish(999)
+        return
+      }
+      const avg = samples.reduce((acc, v) => acc + v, 0) / samples.length
+      finish(avg)
     })
   })
 }
@@ -544,15 +928,16 @@ ipcMain.on('start-speed-test', async () => {
     win?.webContents.send('speed-test-data', { type: 'start' })
 
     win?.webContents.send('speed-test-data', { type: 'ping-start' })
-    const ping = await measurePing()
+    const pingRaw = await measurePing('1.1.1.1', 4)
+    const ping = Number.isFinite(pingRaw) ? pingRaw : 999
     win?.webContents.send('speed-test-data', { type: 'ping-complete', ping })
 
     win?.webContents.send('speed-test-data', { type: 'download-start' })
-    const downloadResult = await measureDownloadSpeed('https://speed.cloudflare.com/__down?bytes=50000000', 10000)
+    const downloadResult = await measureDownloadWithFallback(10000)
     win?.webContents.send('speed-test-data', { type: 'download-complete', download: downloadResult.speed })
 
     win?.webContents.send('speed-test-data', { type: 'upload-start' })
-    const uploadResult = await measureUploadSpeed('https://speed.cloudflare.com/__up', 25)
+    const uploadResult = await measureUploadWithFallback(10000)
     win?.webContents.send('speed-test-data', { type: 'upload-complete', upload: uploadResult.speed })
 
     win?.webContents.send('speed-test-data', { type: 'complete' })

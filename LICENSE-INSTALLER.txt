@@ -1,0 +1,27 @@
+LICENCA DE USO - NETMONITOR
+
+Ao instalar e usar o NetMonitor, voce concorda com os termos abaixo.
+Se nao concordar, clique em "Nao aceito" para cancelar a instalacao.
+
+1) OBJETIVO DO APLICATIVO
+O NetMonitor monitora conectividade de rede em tempo real, incluindo
+latencia (ping), falhas e testes de velocidade.
+
+2) INFORMACOES UTEIS ANTES DE USAR
+- O app pode executar em segundo plano e usar a bandeja do sistema.
+- Recursos de monitoramento dependem de conexao com a internet.
+- O resultado dos testes pode variar conforme rede, roteador e provedor.
+- Em modo desktop, o app pode usar comandos nativos do sistema operacional.
+
+3) LIMITACAO DE RESPONSABILIDADE
+O aplicativo e fornecido "como esta", sem garantias de disponibilidade
+continua, desempenho especifico ou ausencia total de erros.
+O autor nao se responsabiliza por perdas indiretas decorrentes do uso.
+
+4) PRIVACIDADE E DADOS
+O app foi projetado para monitoramento local de conectividade.
+Revise a documentacao do projeto para detalhes tecnicos e operacionais.
+
+5) ACEITACAO
+Ao clicar em "Eu aceito", voce confirma que leu, entendeu e concorda
+com estes termos para continuar a instalacao.

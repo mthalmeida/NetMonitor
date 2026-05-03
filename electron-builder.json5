@@ -1,9 +1,9 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.netmonitor.app",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "NetMonitor",
   "directories": {
     "output": "release/${version}"
   },
@@ -18,6 +18,8 @@
     "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },
   "win": {
+    "icon": "src/assets/ico_app.ico",
+    "signAndEditExecutable": false,
     "target": [
       {
         "target": "nsis",
@@ -30,8 +32,16 @@
   },
   "nsis": {
     "oneClick": false,
+    "license": "LICENSE-INSTALLER.txt",
+    "installerIcon": "src/assets/ico_app.ico",
+    "uninstallerIcon": "src/assets/ico_app.ico",
     "perMachine": false,
+    "allowElevation": true,
     "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": "always",
+    "createStartMenuShortcut": true,
+    "shortcutName": "NetMonitor",
+    "uninstallDisplayName": "NetMonitor",
     "deleteAppDataOnUninstall": false
   },
   "linux": {

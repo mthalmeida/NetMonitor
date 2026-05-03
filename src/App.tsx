@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import './App.css'
+import logoApp from './assets/logo_app.png'
 
 type LogEntry = {
   id: number
@@ -311,38 +312,33 @@ function App() {
           downloadHistory: [],
           uploadHistory: []
         }))
-      } else if (data.type === 'ping-complete') {
-        setSpeedTest(prev => ({
-          ...prev,
-          ping: data.ping,
-          currentPhase: 'download',
-          progress: 10
-        }))
       } else if (data.type === 'download-start') {
         setSpeedTest(prev => ({
           ...prev,
           currentPhase: 'download',
-          progress: 20
+          progress: 10
         }))
       } else if (data.type === 'download-progress') {
         setSpeedTest(prev => ({
           ...prev,
-          download: data.download,
-          progress: 20 + (data.progress * 0.4),
-          downloadHistory: [...prev.downloadHistory.slice(-29), data.download]
+          download: typeof data.download === 'number' ? data.download : prev.download,
+          progress: 10 + (data.progress * 0.45),
+          downloadHistory: typeof data.download === 'number'
+            ? [...prev.downloadHistory.slice(-29), data.download]
+            : prev.downloadHistory
         }))
       } else if (data.type === 'download-complete') {
         setSpeedTest(prev => ({
           ...prev,
           download: data.download,
           currentPhase: 'upload',
-          progress: 60
+          progress: 55
         }))
       } else if (data.type === 'upload-start') {
         setSpeedTest(prev => ({
           ...prev,
           currentPhase: 'upload',
-          progress: 60,
+          progress: 55,
           upload: 0,
           uploadHistory: []
         }))
@@ -350,14 +346,33 @@ function App() {
         setSpeedTest(prev => ({
           ...prev,
           upload: data.upload,
-          progress: 60 + (data.progress * 0.4),
+          progress: 55 + (data.progress * 0.45),
           uploadHistory: [...prev.uploadHistory.slice(-29), data.upload]
         }))
       } else if (data.type === 'upload-complete') {
-        setSpeedTestFlash('end')
         setSpeedTest(prev => ({
           ...prev,
           upload: data.upload,
+          currentPhase: 'idle',
+          progress: 100
+        }))
+      } else if (data.type === 'ping-start') {
+        setSpeedTest(prev => ({
+          ...prev,
+          currentPhase: 'ping',
+          progress: 0
+        }))
+      } else if (data.type === 'ping-complete') {
+        setSpeedTest(prev => ({
+          ...prev,
+          ping: data.ping,
+          currentPhase: 'download',
+          progress: 10
+        }))
+      } else if (data.type === 'complete') {
+        setSpeedTestFlash('end')
+        setSpeedTest(prev => ({
+          ...prev,
           status: 'complete',
           currentPhase: 'idle',
           progress: 100
@@ -650,10 +665,8 @@ function App() {
         <header className="nmTopbar">
           <div className="nmBrand">
             <div className="nmTitleRow">
-              <div className="nmMark" aria-hidden="true" />
-              <div className="nmTitle">NetMonitor</div>
+              <img className="nmMark" src={logoApp} alt="Logo do NetMonitor" />
             </div>
-            <div className="nmSubtitle">Monitor de conectividade com telemetria em tempo real</div>
           </div>
 
           <div className="nmPills" aria-live="polite">
@@ -840,7 +853,7 @@ function App() {
                   <span><strong>{visibleLogs.length}</strong> de <strong>{stats.total}</strong></span>
                   <span>{onlyErrors ? 'Falhas' : 'Tudo'}</span>
                 </div>
-                <div className="nmLogList" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                <div className="nmLogList">
                   {visibleLogs.length === 0 ? (
                     <div className="nmEmpty">
                       <div className="nmEmptyTitle">Nenhuma linha</div>
