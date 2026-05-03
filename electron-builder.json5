@@ -7,6 +7,14 @@
   "directories": {
     "output": "release/${version}"
   },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "mthalmeida",
+      "repo": "NetMonitor",
+      "releaseType": "release"
+    }
+  ],
   "files": [
     "dist",
     "dist-electron"

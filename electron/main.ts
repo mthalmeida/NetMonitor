@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification, dialog } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import https from 'node:https'
 import http from 'node:http'
 import crypto from 'node:crypto'
+import { autoUpdater } from 'electron-updater'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -292,6 +293,7 @@ function updateTrayMenu() {
     {
       label: 'Sair',
       click: () => {
+        isQuitting = true
         if (pingProcess) pingProcess.kill()
         app.quit()
       }
@@ -316,11 +318,68 @@ function createTray() {
   })
 }
 
+function setupAutoUpdater() {
+  if (updateCheckStarted || process.platform !== 'win32' || !app.isPackaged) {
+    return
+  }
+
+  updateCheckStarted = true
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
+  autoUpdater.allowPrerelease = false
+  autoUpdater.allowDowngrade = false
+
+  autoUpdater.on('error', (error) => {
+    console.error('Erro ao verificar atualizações:', error)
+  })
+
+  autoUpdater.on('update-available', async (info) => {
+    const version = info.version || 'mais recente'
+    const options: Electron.MessageBoxOptions = {
+      type: 'info',
+      buttons: ['Atualizar agora', 'Depois'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Atualização disponível',
+      message: `Uma nova versão do NetMonitor está disponível (${version}).`,
+      detail: 'Deseja baixar e instalar a atualização agora? O app será reiniciado automaticamente após o download.'
+    }
+    const result = win
+      ? await dialog.showMessageBox(win, options)
+      : await dialog.showMessageBox(options)
+
+    if (result.response !== 0) {
+      return
+    }
+
+    await autoUpdater.downloadUpdate()
+  })
+
+  autoUpdater.on('update-downloaded', () => {
+    isInstallingUpdate = true
+    isQuitting = true
+    if (pingProcess) {
+      pingProcess.kill()
+      pingProcess = null
+    }
+    autoUpdater.quitAndInstall(false, true)
+  })
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((error) => {
+      console.error('Falha ao iniciar verificação de atualizações:', error)
+    })
+  }, 2500)
+}
+
 let win: BrowserWindow | null = null
 let pingProcess: ChildProcessWithoutNullStreams | null = null
 let speedTestAbortController: AbortController | null = null
 let tray: Tray | null = null
 let isMonitoring = false
+let isQuitting = false
+let isInstallingUpdate = false
+let updateCheckStarted = false
 let lastNotificationTime = 0
 const NOTIFICATION_COOLDOWN_MS = 30000 // 30 segundos entre notificações
 
@@ -999,11 +1058,12 @@ app.on('activate', () => {
 app.whenReady().then(() => {
   createWindow()
   createTray()
+  setupAutoUpdater()
   
   // Prevenir que o app feche quando a janela é fechada
   app.on('before-quit', (event) => {
     // Se não for uma saída explícita (menu Sair), apenas esconder a janela
-    if (win && !win.isDestroyed()) {
+    if (!isQuitting && !isInstallingUpdate && win && !win.isDestroyed()) {
       event.preventDefault()
       win.hide()
     }
